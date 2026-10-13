@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Revolver UI</title>
+    <style>
+        body { font-family: sans-serif; margin: 0; background: #f5f6f8; }
+        nav { background: #2c3e50; padding: 10px 20px; }
+        nav button { background: transparent; color: #fff; border: none; font-size: 15px;
+            padding: 8px 16px; cursor: pointer; border-radius: 4px; }
+        nav button.active { background: #34495e; }
+        main { max-width: 900px; margin: 20px auto; background: #fff; padding: 20px;
+            border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+        h2 { margin-top: 0; }
+        table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+        th, td { border: 1px solid #ddd; padding: 6px 10px; text-align: left; }
+        th { background: #eef1f4; }
+        input, select { padding: 5px; }
+        button.save { background: #27ae60; color: #fff; border: none; padding: 8px 18px;
+            border-radius: 4px; cursor: pointer; }
+        button.small { padding: 4px 10px; }
+        .hidden { display: none; }
+        #status { margin-top: 10px; color: #27ae60; font-weight: bold; }
+    </style>
+</head>
+<body>
+<nav>
+    <button data-tab="stats" class="active">Статистика</button>
+    <button data-tab="params">Общие параметры</button>
+    <button data-tab="employees">Сотрудники</button>
+    <button data-tab="history">История</button>
+    <button data-tab="logs">Логи</button>
+</nav>
+<main>
+    <!-- Статистика -->
+    <section id="tab-stats">
+        <h2>Статистика</h2>
+        <p>Всего назначений (по данным БД): <b id="total">…</b></p>
+        <h3>За сегодня</h3>
+        <table id="today-table"><thead><tr><th>Сотрудник</th><th>Задач</th></tr></thead><tbody></tbody></table>
+        <h3>За последние 7 дней</h3>
+        <table id="daily-table"><thead><tr><th>Дата</th><th>Сотрудник</th><th>Задач</th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <!-- История -->
+    <section id="tab-history" class="hidden">
+        <h2>История назначений</h2>
+        <p>
+            <label>С: <input type="date" id="h-from"></label>
+            <label>По: <input type="date" id="h-to"></label>
+            <label>Сотрудник:
+                <select id="h-login"><option value="">все</option></select></label>
+            <button class="save" onclick="loadHistory(1)">Показать</button>
+        </p>
+        <p id="history-count"></p>
+        <table id="history-table"><thead>
+        <tr><th>Время</th><th>Задача</th><th>Сотрудник</th><th>ExecutorId</th>
+        </thead><tbody></tbody></table>
+        <p>
+            На странице:
+            <select id="h-size" onchange="loadHistory(1)">
+                <option value="20">20</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+                <option value="200">200</option>
+            </select>
+            <button class="small" onclick="loadHistory(historyPage - 1)" id="h-prev">← Назад</button>
+            <span id="h-page"></span>
+            <button class="small" onclick="loadHistory(historyPage + 1)" id="h-next">Вперёд →</button>
+            <button class="save" onclick="exportHistory('page')">Excel: страница</button>
+            <button class="save" onclick="exportHistory('all')">Excel: все страницы</button>
+        </p>
+    </section>
+
+    <!-- Параметры -->
+    <section id="tab-params" class="hidden">
+        <h2>Общие параметры</h2>
+        <p><label>Параллелизм (APP_PARALLELISM): <input type="number" id="p-parallelism" style="width:80px"></label></p>
+        <p><label>Интервал проверки, сек (APP_CHECK_INTERVAL_MS): <input type="number" id="p-interval" min="1" step="1" style="width:100px"></label></p>
+        <p><label>Обработка включена (APP_ENABLED):
+            <select id="p-enabled"><option value="true">да</option><option value="false">нет</option></select></label></p>
+        <button class="save" onclick="saveParams()">Сохранить</button>
+        <div id="status-params"></div>
+    </section>
+
+    <!-- Сотрудники -->
+    <section id="tab-employees" class="hidden">
+        <h2>Сотрудники (LOGIN_TO_EXECUTOR_MAP)</h2>
+        <table id="emp-table"><thead><tr><th>Логин</th><th>ExecutorId</th><th></th></tr></thead><tbody></tbody></table>
+        <button class="save" onclick="addRow()">+ добавить</button>
+        <button class="save" onclick="saveEmployees()">Сохранить карту</button>
+        <div id="status-emp"></div>
+    </section>
+    <!-- Логи -->
+    <section id="tab-logs" class="hidden">
+        <h2>Логи</h2>
+        <p>
+            <label><input type="checkbox" id="log-pause"> Пауза</label>
+            <button class="small" onclick="clearLogs()">Очистить окно</button>
+        </p>
+        <pre id="log-view"></pre>
+    </section>
+</main>
+<script>
+    const tabs = document.querySelectorAll('nav button');
+    tabs.forEach(b => b.onclick = () => {
+        tabs.forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        document.querySelectorAll('main section').forEach(s => s.classList.add('hidden'));
+        document.getElementById('tab-' + b.dataset.tab).classList.remove('hidden');
+        if (b.dataset.tab === 'history') loadHistory(1);
+        if (b.dataset.tab === 'logs') pollLogs();
+    });
+
+    function showStatus(id, text, ok = true) {
+        const el = document.getElementById(id);
+        el.textContent = text;
+        el.style.color = ok ? '#27ae60' : '#c0392b';
+        setTimeout(() => el.textContent = '', 4000);
+    }
+
+    async function loadStats() {
+        const s = await (await fetch('/api/stats/summary')).json();
+        document.getElementById('total').textContent = s.total;
+        const tb = document.querySelector('#today-table tbody');
+        tb.innerHTML = '';
+        s.today.forEach(r => tb.insertAdjacentHTML('beforeend',
+            `<tr><td>${r.employee_login}</td><td>${r.cnt}</td></tr>`));
+        const d = await (await fetch('/api/stats/daily?days=7')).json();
+        const db = document.querySelector('#daily-table tbody');
+        db.innerHTML = '';
+        d.forEach(r => db.insertAdjacentHTML('beforeend',
+            `<tr><td>${r.day}</td><td>${r.employee_login}</td><td>${r.cnt}</td></tr>`));
+    }
+
+    async function loadParams() {
+        const c = await (await fetch('/api/config')).json();
+        document.getElementById('p-parallelism').value = c.APP_PARALLELISM || '';
+        document.getElementById('p-interval').value = Math.round((c.APP_CHECK_INTERVAL_MS || 0) / 1000);
+        document.getElementById('p-enabled').value = c.APP_ENABLED || 'true';
+    }
+
+    async function saveParams() {
+        const body = {
+            APP_PARALLELISM: document.getElementById('p-parallelism').value,
+            APP_CHECK_INTERVAL_MS: String(parseInt(document.getElementById('p-interval').value, 10) * 1000),
+            APP_ENABLED: document.getElementById('p-enabled').value
+        };
+        await fetch('/api/config', { method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body) });
+        showStatus('status-params', 'Сохранено');
+    }
+
+    function parseMap(json) {
+        try { return JSON.parse(json); } catch (e) { return {}; }
+    }
+
+    async function loadEmployees() {
+        const c = await (await fetch('/api/config')).json();
+        const map = parseMap(c.LOGIN_TO_EXECUTOR_MAP || '{}');
+        const tb = document.querySelector('#emp-table tbody');
+        tb.innerHTML = '';
+        Object.entries(map).forEach(([login, id]) => addRow(login, id));
+    }
+
+    function addRow(login = '', id = '') {
+        document.querySelector('#emp-table tbody').insertAdjacentHTML('beforeend',
+            `<tr><td><input value="${login}"></td><td><input value="${id}" style="width:100px"></td>
+         <td><button class="small" onclick="this.closest('tr').remove()">✕</button></td></tr>`);
+    }
+
+    async function saveEmployees() {
+        const map = {};
+        let valid = true;
+        document.querySelectorAll('#emp-table tbody tr').forEach(tr => {
+            const [login, id] = tr.querySelectorAll('input');
+            if (login.value.trim() && id.value.trim()) map[login.value.trim()] = id.value.trim();
+            else valid = false;
+        });
+        if (!valid) return showStatus('status-emp', 'Есть строки с пустыми полями', false);
+        await fetch('/api/config', { method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ LOGIN_TO_EXECUTOR_MAP: JSON.stringify(map) }) });
+        showStatus('status-emp', `Сохранено: ${Object.keys(map).length} сотрудников`);
+    }
+
+    document.querySelector('button[data-tab="stats"]').click();
+    loadStats(); loadParams(); loadEmployees();
+    setInterval(loadStats, 30000);
+
+    let logSinceId = 0;
+
+    async function pollLogs() {
+        if (document.getElementById('log-pause').checked) return;
+        try {
+            const data = await (await fetch('/api/logs?sinceId=' + logSinceId)).json();
+            if (data.lines.length) {
+                const view = document.getElementById('log-view');
+                const atBottom = view.scrollTop + view.clientHeight >= view.scrollHeight - 30;
+                data.lines.forEach(l => {
+                    const sep = l.indexOf('\t');
+                    const text = l.slice(sep + 1);
+                    const span = document.createElement('span');
+                    if (text.includes('[ERROR]')) span.style.color = '#ff6b68';
+                    else if (text.includes('[WARN]') || text.includes('[WARNING]')) span.style.color = '#f0c674';
+                    span.textContent = text + '\n';
+                    view.appendChild(span);
+                });
+                while (view.childNodes.length > 5000) view.removeChild(view.firstChild);
+                if (atBottom) view.scrollTop = view.scrollHeight;
+                logSinceId = data.lastId;
+            }
+        } catch (e) {
+            logSinceId = 0; // сервер перезапускался — начнём чтение заново
+        }
+    }
+
+    function clearLogs() {
+        document.getElementById('log-view').textContent = '';
+    }
+
+    setInterval(pollLogs, 2000);
+
+    let historyPage = 1;
+
+    function historyParams() {
+        const params = new URLSearchParams({
+            from: document.getElementById('h-from').value,
+            to: document.getElementById('h-to').value
+        });
+        if (document.getElementById('h-login').value) params.set('login', document.getElementById('h-login').value);
+        return params;
+    }
+
+    async function loadHistory(page) {
+        const size = parseInt(document.getElementById('h-size').value, 10);
+        if (page < 1) page = 1;
+        historyPage = page;
+
+        const params = historyParams();
+        params.set('page', page);
+        params.set('size', size);
+
+        const data = await (await fetch('/api/stats/history?' + params)).json();
+        const totalPages = Math.max(1, Math.ceil(data.total / size));
+
+        document.getElementById('history-count').textContent =
+            `Найдено записей: ${data.total}. Страница ${page} из ${totalPages}`;
+        document.getElementById('h-prev').disabled = page <= 1;
+        document.getElementById('h-next').disabled = page >= totalPages;
+
+        const tb = document.querySelector('#history-table tbody');
+        tb.innerHTML = '';
+        data.rows.forEach(r => tb.insertAdjacentHTML('beforeend',
+            `<tr><td>${r.assigned_at}</td><td>${r.task_id}</td><td>${r.employee_login}</td>
+     <td>${r.executor_id}</td></tr>`));
+    }
+
+    function exportHistory(mode) {
+        const params = historyParams();
+        if (mode === 'page') {
+            params.set('page', historyPage);
+            params.set('size', document.getElementById('h-size').value);
+        }
+        window.open('/api/stats/history/export?' + params, '_blank');
+    }
+
+    async function loadEmployeeOptions() {
+        const list = await (await fetch('/api/stats/employees')).json();
+        const sel = document.getElementById('h-login');
+        list.forEach(l => sel.insertAdjacentHTML('beforeend', `<option>${l}</option>`));
+    }
+    document.getElementById('h-from').value = new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10);
+    document.getElementById('h-to').value = new Date().toISOString().slice(0, 10);
+    loadEmployeeOptions();
+</script>
+</body>
+</html>

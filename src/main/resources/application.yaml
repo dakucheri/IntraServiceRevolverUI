@@ -1,0 +1,20 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/revolver?options=-c%20TimeZone=Europe/Moscow
+    username: revolver
+    password: revolver
+
+server:
+  port: 8080
+
+app:
+  auth: ${APP_AUTH}                            # APP_AUTH остаётся секретом в окружении, в БД её не кладём
+  base-url: https://10.255.183.3/api/task
+  active-line-url: http://192.168.100.114/api/v1/line/active
+  observer-id: "1598"
+  stats-file: ./stats/assignment_stats.csv
+  summary-file: ./stats/summary_stats.txt
+
+  logging:
+    pattern:
+      console: "[%d{dd-MM-yyyy HH:mm:ss}] [%thread] [%-5level] %msg%n"

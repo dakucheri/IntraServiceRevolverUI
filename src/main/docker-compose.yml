@@ -1,0 +1,21 @@
+services:
+  revolver-ui:
+    build: .
+    container_name: revolver-ui
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?options=-c%20TimeZone=Europe/Moscow
+      SPRING_DATASOURCE_USERNAME: ${DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      APP_ENABLED: "true"
+      APP_UI_USERNAME: ${APP_UI_USERNAME}
+      APP_UI_PASSWORD: ${APP_UI_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
