@@ -141,7 +141,7 @@ public class AssignerService {
     }
 
     private void processTasksGroup1(CloseableHttpClient client, List<String> activeEmployees, Map<String, String> executorMap) {
-        String requestUrl = baseUrl + "?StatusIds=43,31&ServiceIds=65,64,63,62,61,50,49,46,48,45,42,41,44,43,32,22,21,20,17&fields=Id,Name,StatusId,Creator,ExecutorIds,ServiceId&PageSize=50";
+        String requestUrl = baseUrl + "?StatusIds=43,31&ServiceIds=65,64,63,62,61,50,49,46,48,45,42,41,44,43,32,22,21,20,17&fields=Id,Name,StatusId,Creator,ExecutorIds,ServiceId,ObserverIds&PageSize=50";
         HttpGet getRequest = new HttpGet(requestUrl);
         getRequest.setHeader("Authorization", auth);
 
@@ -177,7 +177,7 @@ public class AssignerService {
     }
 
     private List<Task> getStableTasksForGroup2(CloseableHttpClient client) throws InterruptedException {
-        String requestUrl = baseUrl + "?ServiceIds=47,19,65&StatusIds=27&fields=Id,Name,StatusId,Creator,ExecutorIds,ServiceId&PageSize=50";
+        String requestUrl = baseUrl + "?ServiceIds=47,19,65&StatusIds=27&fields=Id,Name,StatusId,Creator,ExecutorIds,ServiceId,ObserverIds&PageSize=50";
 
         HttpGet get1 = new HttpGet(requestUrl);
         get1.setHeader("Authorization", auth);
@@ -290,7 +290,7 @@ public class AssignerService {
         }
 
         try {
-            updateTask(client, taskId, executorId, isGroup2);
+            updateTask(client, task, executorId, isGroup2);
 
             // Дневная статистика и CSV — как раньше
             dailyStats.computeIfAbsent(LocalDate.now(), d -> new ConcurrentHashMap<>())
@@ -314,26 +314,38 @@ public class AssignerService {
         }
     }
 
-    private void updateTask(HttpClient client, int taskId, String executorId, boolean isGroup2) throws IOException {
-        HttpPut putRequest = new HttpPut(baseUrl + "/" + taskId);
+    private void updateTask(HttpClient client, Task task, String executorId, boolean isGroup2) throws IOException {
+        HttpPut putRequest = new HttpPut(baseUrl + "/" + task.getId());
         putRequest.setHeader("Authorization", auth);
         putRequest.setHeader("Content-Type", "application/json");
 
         Map<String, Object> requestBody = new HashMap<>();
         requestBody.put("ExecutorIds", executorId);
-        requestBody.put("ObserverIds", observerId);
+
+        // Берём ObserverIds из задачи; если пусто — используем дефолт из конфига
+        String observerIds = task.getObserverIds();
+        if (observerIds == null || observerIds.isBlank()) {
+            observerIds = observerId; // observerId — это @Value("${app.observer-id}")
+        }
+        requestBody.put("ObserverIds", observerIds);
+
         if (!isGroup2) {
             requestBody.put("StatusId", "27");
             requestBody.put("Comment", "Здравствуйте. Информируем о том, что Ваша заявка в работе.");
             requestBody.put("IsPrivateComment", false);
         }
 
-        putRequest.setEntity(new StringEntity(mapper.writeValueAsString(requestBody), "UTF-8"));
+        String jsonBody = mapper.writeValueAsString(requestBody);
+        log("DEBUG", "PUT body для задачи №" + task.getId() + ": " + jsonBody);
+
+        putRequest.setEntity(new StringEntity(jsonBody, "UTF-8"));
 
         HttpResponse response = client.execute(putRequest);
         int statusCode = response.getStatusLine().getStatusCode();
+        String responseBody = EntityUtils.toString(response.getEntity(), "UTF-8");
+
         if (statusCode != 200 && statusCode != 204) {
-            throw new IOException("HTTP " + statusCode + " при обновлении задачи №" + taskId);
+            throw new IOException("HTTP " + statusCode + " при обновлении задачи №" + task.getId() + ": " + responseBody);
         }
     }
 
@@ -353,8 +365,11 @@ public class AssignerService {
         @JsonProperty("Creator") private String creator;
         @JsonProperty("ExecutorIds") private String executorIds;
         @JsonProperty("ServiceId") private Integer serviceId;
+        @JsonProperty("ObserverIds") private String observerIds; // <-- новое поле
+
         public int getId() { return id; }
         public String getExecutorIds() { return executorIds; }
+        public String getObserverIds() { return observerIds; } // <-- новый геттер
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
