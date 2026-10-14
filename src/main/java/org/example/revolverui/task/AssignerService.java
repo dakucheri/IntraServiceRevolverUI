@@ -177,7 +177,7 @@ public class AssignerService {
     }
 
     private List<Task> getStableTasksForGroup2(CloseableHttpClient client) throws InterruptedException {
-        String requestUrl = baseUrl + "?ServiceIds=47,19&StatusIds=27&fields=Id,Name,StatusId,Creator,ExecutorIds,ServiceId&PageSize=50";
+        String requestUrl = baseUrl + "?ServiceIds=47,19,65&StatusIds=27&fields=Id,Name,StatusId,Creator,ExecutorIds,ServiceId&PageSize=50";
 
         HttpGet get1 = new HttpGet(requestUrl);
         get1.setHeader("Authorization", auth);
