@@ -141,7 +141,7 @@ public class AssignerService {
     }
 
     private void processTasksGroup1(CloseableHttpClient client, List<String> activeEmployees, Map<String, String> executorMap) {
-        String requestUrl = baseUrl + "?StatusIds=43,31&ServiceIds=65,64,63,62,61,50,49,46,48,45,42,41,44,43,32,22,21,20,17&fields=Id,Name,StatusId,Creator,ExecutorIds,ServiceId,ObserverIds&PageSize=50";
+        String requestUrl = baseUrl + "?StatusIds=43,31&ServiceIds=64,63,62,61,50,49,46,48,45,42,41,44,43,32,22,21,20,17&fields=Id,Name,StatusId,Creator,ExecutorIds,ServiceId,ObserverIds&PageSize=50";
         HttpGet getRequest = new HttpGet(requestUrl);
         getRequest.setHeader("Authorization", auth);
 
