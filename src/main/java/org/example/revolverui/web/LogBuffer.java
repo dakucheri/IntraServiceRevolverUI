@@ -37,7 +37,6 @@ public class LogBuffer extends AppenderBase<ILoggingEvent> {
 
     @Override
     protected void append(ILoggingEvent event) {
-        // время показываем по МСК независимо от таймзоны машины
         String time = LocalDateTime.ofInstant(event.getInstant(), ZoneId.of("Europe/Moscow")).format(FMT);
         String line = "[" + time + "] [" + event.getThreadName() + "] [" + event.getLevel() + "] "
                 + event.getFormattedMessage();
@@ -52,7 +51,6 @@ public class LogBuffer extends AppenderBase<ILoggingEvent> {
     public List<String> getLogs(long sinceId) {
         synchronized (lines) {
             long maxId = seq.get();
-            // после перезапуска приложения счётчик начинается с нуля — сбрасываем клиента на начало
             long from = sinceId > maxId ? 0 : sinceId;
             List<String> result = new ArrayList<>();
             for (String line : lines) {

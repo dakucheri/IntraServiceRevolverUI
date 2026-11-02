@@ -31,7 +31,7 @@ public class SecurityConfig {
     @Bean
     public InMemoryUserDetailsManager userDetailsService(PasswordEncoder encoder) {
         String rawPassword = (password == null || password.isBlank())
-                ? "changeme"  // дефолт для локальной разработки
+                ? "changeme"
                 : password;
         UserDetails user = User.builder()
                 .username(username)

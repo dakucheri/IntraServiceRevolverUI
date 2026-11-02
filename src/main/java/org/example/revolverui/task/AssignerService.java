@@ -114,7 +114,6 @@ public class AssignerService {
     private void processTasks() {
         try (CloseableHttpClient client = createHttpClient()) {
             while (running.get()) {
-                // Конфиг читаем из БД на каждом цикле — правки через веб применяются без рестарта
                 int intervalMs = config.getInt(AppConfigService.CHECK_INTERVAL_MS, 60000);
                 if ("false".equalsIgnoreCase(config.get(AppConfigService.ENABLED).orElse("true"))) {
                     log("INFO", "Обработка отключена (APP_ENABLED=false) — спим и ждём");
@@ -292,7 +291,6 @@ public class AssignerService {
         try {
             updateTask(client, task, executorId, isGroup2);
 
-            // Дневная статистика и CSV — как раньше
             dailyStats.computeIfAbsent(LocalDate.now(), d -> new ConcurrentHashMap<>())
                     .merge(login, 1, Integer::sum);
             synchronized (statsLock) {
@@ -300,7 +298,6 @@ public class AssignerService {
                 fileWriter.writeSummary(processedTaskIds.size(), dailyStats, now());
             }
 
-            // БД — если упало, CSV всё равно жив, продолжаем работу
             try {
                 statsDao.insert(taskId, login, executorId, isGroup2 ? "GROUP2" : "GROUP1");
             } catch (Exception e) {
@@ -322,10 +319,9 @@ public class AssignerService {
         Map<String, Object> requestBody = new HashMap<>();
         requestBody.put("ExecutorIds", executorId);
 
-        // Берём ObserverIds из задачи; если пусто — используем дефолт из конфига
         String observerIds = task.getObserverIds();
         if (observerIds == null || observerIds.isBlank()) {
-            observerIds = observerId; // observerId — это @Value("${app.observer-id}")
+            observerIds = observerId;
         }
         requestBody.put("ObserverIds", observerIds);
 
@@ -365,11 +361,11 @@ public class AssignerService {
         @JsonProperty("Creator") private String creator;
         @JsonProperty("ExecutorIds") private String executorIds;
         @JsonProperty("ServiceId") private Integer serviceId;
-        @JsonProperty("ObserverIds") private String observerIds; // <-- новое поле
+        @JsonProperty("ObserverIds") private String observerIds;
 
         public int getId() { return id; }
         public String getExecutorIds() { return executorIds; }
-        public String getObserverIds() { return observerIds; } // <-- новый геттер
+        public String getObserverIds() { return observerIds; }
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

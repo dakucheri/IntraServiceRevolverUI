@@ -26,7 +26,7 @@ public class AppConfigService {
         try {
             return dao.get(key);
         } catch (Exception e) {
-            return Optional.empty(); // БД недоступна — упадём на env/дефолты
+            return Optional.empty();
         }
     }
 
