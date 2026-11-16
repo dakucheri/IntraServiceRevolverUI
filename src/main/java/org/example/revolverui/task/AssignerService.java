@@ -140,7 +140,10 @@ public class AssignerService {
     }
 
     private void processTasksGroup1(CloseableHttpClient client, List<String> activeEmployees, Map<String, String> executorMap) {
-        String requestUrl = baseUrl + "?StatusIds=43,31&ServiceIds=64,63,62,61,50,49,46,48,45,42,41,44,43,32,22,21,20,17&fields=Id,Name,StatusId,Creator,ExecutorIds,ServiceId,ObserverIds&PageSize=50";
+        String serviceIds = config.getServiceIds(AppConfigService.GROUP1_SERVICE_IDS, AppConfigService.DEFAULT_GROUP1_SERVICES);
+        String requestUrl = baseUrl + "?StatusIds=43,31&ServiceIds=" + serviceIds
+                + "&fields=Id,Name,StatusId,Creator,ExecutorIds,ServiceId,ObserverIds&PageSize=50";
+        log("INFO", "Group1: сервисы для обработки: " + serviceIds);
         HttpGet getRequest = new HttpGet(requestUrl);
         getRequest.setHeader("Authorization", auth);
 
@@ -176,7 +179,10 @@ public class AssignerService {
     }
 
     private List<Task> getStableTasksForGroup2(CloseableHttpClient client) throws InterruptedException {
-        String requestUrl = baseUrl + "?ServiceIds=47,19,65&StatusIds=27&fields=Id,Name,StatusId,Creator,ExecutorIds,ServiceId,ObserverIds&PageSize=50";
+        String serviceIds = config.getServiceIds(AppConfigService.GROUP2_SERVICE_IDS, AppConfigService.DEFAULT_GROUP2_SERVICES);
+        String requestUrl = baseUrl + "?ServiceIds=" + serviceIds
+                + "&StatusIds=27&fields=Id,Name,StatusId,Creator,ExecutorIds,ServiceId,ObserverIds&PageSize=50";
+        log("INFO", "Group2: сервисы для обработки: " + serviceIds);
 
         HttpGet get1 = new HttpGet(requestUrl);
         get1.setHeader("Authorization", auth);

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -14,9 +15,20 @@ public class AppConfigService {
     public static final String CHECK_INTERVAL_MS = "APP_CHECK_INTERVAL_MS";
     public static final String EXECUTOR_MAP = "LOGIN_TO_EXECUTOR_MAP";
     public static final String ENABLED = "APP_ENABLED";
+    public static final String GROUP1_SERVICE_IDS = "GROUP1_SERVICE_IDS";
+    public static final String GROUP2_SERVICE_IDS = "GROUP2_SERVICE_IDS";
+    public static final String DEFAULT_GROUP1_SERVICES = "65,64,63,62,61,50,49,46,48,45,42,41,44,43,32,22,21,20,17";
+    public static final String DEFAULT_GROUP2_SERVICES = "47,19,65";
 
     private final ConfigDao dao;
     private final ObjectMapper mapper = new ObjectMapper();
+
+    private final org.slf4j.Logger logger =
+            org.slf4j.LoggerFactory.getLogger(AppConfigService.class);
+
+    public String getServiceIds(String key, String defaultValue) {
+        return get(key).filter(v -> !v.isBlank()).orElse(defaultValue);
+    }
 
     public AppConfigService(ConfigDao dao) {
         this.dao = dao;
@@ -69,6 +81,36 @@ public class AppConfigService {
         if (result.isEmpty()) {
             result.put("ikornilov", "319");
             result.put("employee-1", "329");
+        }
+        return result;
+    }
+    public static final String SERVICE_MAP = "SERVICE_MAP";
+
+    private final com.fasterxml.jackson.databind.ObjectMapper jsonMapper =
+            new com.fasterxml.jackson.databind.ObjectMapper();
+
+    /** Карта название сервиса -> ID Сервиса. Приоритет: БД -> env SERVICE_TO_ID_* -> дефолты. */
+    public Map<String, String> getServiceMap() {
+        // 1. БД — правки через UI имеют высший приоритет
+        String json = get(SERVICE_MAP).orElse(null);
+        if (json != null) {
+            try {
+                return mapper.readValue(json, new TypeReference<Map<String, String>>() {});
+            } catch (Exception ignored) { }
+        }
+
+        // 2. env-переменные SERVICE_TO_ID_<НАЗВАНИЕ>
+        Map<String, String> result = new HashMap<>();
+        for (Map.Entry<String, String> e : System.getenv().entrySet()) {
+            if (e.getKey().startsWith("SERVICE_TO_ID_")) {
+                result.put(e.getKey().replace("SERVICE_TO_ID_", ""), e.getValue());
+            }
+        }
+
+        // 3. Дефолты (подставь свои реальные пары)
+        if (result.isEmpty()) {
+            result.put("Доступы", "65");
+            result.put("Прочее", "17");
         }
         return result;
     }

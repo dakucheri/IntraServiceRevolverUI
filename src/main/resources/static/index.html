@@ -28,6 +28,7 @@
     <button data-tab="stats" class="active">Статистика</button>
     <button data-tab="params">Общие параметры</button>
     <button data-tab="employees">Сотрудники</button>
+    <button data-tab="services">Сервисы</button>
     <button data-tab="history">История</button>
     <button data-tab="logs">Логи</button>
 </nav>
@@ -81,6 +82,8 @@
             <select id="p-enabled"><option value="true">да</option><option value="false">нет</option></select></label></p>
         <button class="save" onclick="saveParams()">Сохранить</button>
         <div id="status-params"></div>
+        <p><label>Сервисы для общего распределения (через запятую): <input type="text" id="p-group1-services" style="width:400px"></label></p>
+        <p><label>Сервисы для распределения после ИИ ФЕРЗЛ (через запятую): <input type="text" id="p-group2-services" style="width:400px"></label></p>
     </section>
 
     <!-- Сотрудники -->
@@ -90,6 +93,14 @@
         <button class="save" onclick="addRow()">+ добавить</button>
         <button class="save" onclick="saveEmployees()">Сохранить карту</button>
         <div id="status-emp"></div>
+    </section>
+    <!-- Сервисы -->
+    <section id="tab-services" class="hidden">
+        <h2>Сервисы (SERVICE_MAP)</h2>
+        <table id="svc-table"><thead><tr><th>Название Сервиса</th><th>ID Сервиса</th><th></th></tr></thead><tbody></tbody></table>
+        <button class="save" onclick="addServiceRow()">+ добавить</button>
+        <button class="save" onclick="saveServices()">Сохранить карту</button>
+        <div id="status-svc"></div>
     </section>
     <!-- Логи -->
     <section id="tab-logs" class="hidden">
@@ -138,13 +149,17 @@
         document.getElementById('p-parallelism').value = c.APP_PARALLELISM || '';
         document.getElementById('p-interval').value = Math.round((c.APP_CHECK_INTERVAL_MS || 0) / 1000);
         document.getElementById('p-enabled').value = c.APP_ENABLED || 'true';
+        document.getElementById('p-group1-services').value = c.GROUP1_SERVICE_IDS || '';
+        document.getElementById('p-group2-services').value = c.GROUP2_SERVICE_IDS || '';
     }
 
     async function saveParams() {
         const body = {
             APP_PARALLELISM: document.getElementById('p-parallelism').value,
             APP_CHECK_INTERVAL_MS: String(parseInt(document.getElementById('p-interval').value, 10) * 1000),
-            APP_ENABLED: document.getElementById('p-enabled').value
+            APP_ENABLED: document.getElementById('p-enabled').value,
+            GROUP1_SERVICE_IDS: document.getElementById('p-group1-services').value,
+            GROUP2_SERVICE_IDS: document.getElementById('p-group2-services').value
         };
         await fetch('/api/config', { method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -186,10 +201,39 @@
     }
 
     document.querySelector('button[data-tab="stats"]').click();
-    loadStats(); loadParams(); loadEmployees();
+    loadStats(); loadParams(); loadEmployees(); loadServices();
     setInterval(loadStats, 30000);
 
     let logSinceId = 0;
+
+    async function loadServices() {
+        const c = await (await fetch('/api/config')).json();
+        const map = parseMap(c.SERVICE_MAP || '{}');
+        const tb = document.querySelector('#svc-table tbody');
+        tb.innerHTML = '';
+        Object.entries(map).forEach(([name, id]) => addServiceRow(name, id));
+    }
+
+    function addServiceRow(name = '', id = '') {
+        document.querySelector('#svc-table tbody').insertAdjacentHTML('beforeend',
+            `<tr><td><input value="${name}"></td><td><input value="${id}" style="width:100px"></td>
+     <td><button class="small" onclick="this.closest('tr').remove()">✕</button></td></tr>`);
+    }
+
+    async function saveServices() {
+        const map = {};
+        let valid = true;
+        document.querySelectorAll('#svc-table tbody tr').forEach(tr => {
+            const [name, id] = tr.querySelectorAll('input');
+            if (name.value.trim() && id.value.trim()) map[name.value.trim()] = id.value.trim();
+            else valid = false;
+        });
+        if (!valid) return showStatus('status-svc', 'Есть строки с пустыми полями', false);
+        await fetch('/api/config', { method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ SERVICE_MAP: JSON.stringify(map) }) });
+        showStatus('status-svc', `Сохранено: ${Object.keys(map).length} сервисов`);
+    }
 
     async function pollLogs() {
         if (document.getElementById('log-pause').checked) return;
