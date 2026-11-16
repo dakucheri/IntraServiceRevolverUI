@@ -25,6 +25,11 @@
 </head>
 <body>
 <nav>
+    <div style="position:absolute; top:12px; right:20px; text-align:right;">
+        <div style="font-size:18px; font-weight:700; color:#fff;">Револьвер Л1</div>
+        <div style="font-size:12px; color:#bdc3c7;">v1.0.10</div>
+    </div>
+
     <button data-tab="stats" class="active">Статистика</button>
     <button data-tab="params">Общие параметры</button>
     <button data-tab="employees">Сотрудники</button>
@@ -82,8 +87,6 @@
             <select id="p-enabled"><option value="true">да</option><option value="false">нет</option></select></label></p>
         <button class="save" onclick="saveParams()">Сохранить</button>
         <div id="status-params"></div>
-        <p><label>Сервисы для общего распределения (через запятую): <input type="text" id="p-group1-services" style="width:400px"></label></p>
-        <p><label>Сервисы для распределения после ИИ ФЕРЗЛ (через запятую): <input type="text" id="p-group2-services" style="width:400px"></label></p>
     </section>
 
     <!-- Сотрудники -->
@@ -97,7 +100,9 @@
     <!-- Сервисы -->
     <section id="tab-services" class="hidden">
         <h2>Сервисы (SERVICE_MAP)</h2>
-        <table id="svc-table"><thead><tr><th>Название Сервиса</th><th>ID Сервиса</th><th></th></tr></thead><tbody></tbody></table>
+        <table id="svc-table"><thead>
+        <tr><th>ID Сервиса</th><th>Название Сервиса</th><th>Группа обработки</th><th></th></tr>
+        </thead><tbody></tbody></table>
         <button class="save" onclick="addServiceRow()">+ добавить</button>
         <button class="save" onclick="saveServices()">Сохранить карту</button>
         <div id="status-svc"></div>
@@ -206,33 +211,69 @@
 
     let logSinceId = 0;
 
+    function groupOption(value, id, g1, g2) {
+        const cur = g1.includes(id) ? 'g1' : (g2.includes(id) ? 'g2' : '');
+        return `<select>
+        <option value="" ${cur === '' ? 'selected' : ''}>— не используется</option>
+        <option value="g1" ${cur === 'g1' ? 'selected' : ''}>Общее распределение (Group1)</option>
+        <option value="g2" ${cur === 'g2' ? 'selected' : ''}>После ИИ ФЕРЗЛ (Group2)</option>
+    </select>`;
+    }
+
     async function loadServices() {
         const c = await (await fetch('/api/config')).json();
         const map = parseMap(c.SERVICE_MAP || '{}');
+        const g1 = (c.GROUP1_SERVICE_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
+        const g2 = (c.GROUP2_SERVICE_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
         const tb = document.querySelector('#svc-table tbody');
         tb.innerHTML = '';
-        Object.entries(map).forEach(([name, id]) => addServiceRow(name, id));
+        Object.entries(map).forEach(([id, name]) => addServiceRow(id, name, g1, g2));
     }
 
-    function addServiceRow(name = '', id = '') {
-        document.querySelector('#svc-table tbody').insertAdjacentHTML('beforeend',
-            `<tr><td><input value="${name}"></td><td><input value="${id}" style="width:100px"></td>
-     <td><button class="small" onclick="this.closest('tr').remove()">✕</button></td></tr>`);
+    function addServiceRow(id = '', name = '', g1, g2) {
+        const tbody = document.querySelector('#svc-table tbody');
+        if (g1 === undefined) { // ручное добавление — перечитываем актуальные группы
+            fetch('/api/config').then(r => r.json()).then(c => {
+                const l1 = (c.GROUP1_SERVICE_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
+                const l2 = (c.GROUP2_SERVICE_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
+                appendServiceRow(tbody, id, name, l1, l2);
+            });
+            return;
+        }
+        appendServiceRow(tbody, id, name, g1, g2);
+    }
+
+    function appendServiceRow(tbody, id, name, g1, g2) {
+        tbody.insertAdjacentHTML('beforeend',
+            `<tr>
+            <td><input class="svc-id" value="${esc(id)}" style="width:80px"></td>
+            <td><input class="svc-name" value="${esc(name)}" style="width:320px"></td>
+            <td>${groupOption('', id, g1, g2)}</td>
+            <td><button class="small" onclick="this.closest('tr').remove()">✕</button></td>
+        </tr>`);
     }
 
     async function saveServices() {
         const map = {};
+        const g1 = [], g2 = [];
         let valid = true;
         document.querySelectorAll('#svc-table tbody tr').forEach(tr => {
-            const [name, id] = tr.querySelectorAll('input');
-            if (name.value.trim() && id.value.trim()) map[name.value.trim()] = id.value.trim();
-            else valid = false;
+            const [id, name] = tr.querySelectorAll('input');
+            const group = tr.querySelector('select').value;
+            if (!id.value.trim() || !name.value.trim()) { valid = false; return; }
+            map[id.value.trim()] = name.value.trim();
+            if (group === 'g1') g1.push(id.value.trim());
+            else if (group === 'g2') g2.push(id.value.trim());
         });
         if (!valid) return showStatus('status-svc', 'Есть строки с пустыми полями', false);
         await fetch('/api/config', { method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ SERVICE_MAP: JSON.stringify(map) }) });
-        showStatus('status-svc', `Сохранено: ${Object.keys(map).length} сервисов`);
+            body: JSON.stringify({
+                SERVICE_MAP: JSON.stringify(map),
+                GROUP1_SERVICE_IDS: g1.join(','),
+                GROUP2_SERVICE_IDS: g2.join(',')
+            }) });
+        showStatus('status-svc', `Сохранено: ${Object.keys(map).length} сервисов (G1: ${g1.length}, G2: ${g2.length})`);
     }
 
     async function pollLogs() {
