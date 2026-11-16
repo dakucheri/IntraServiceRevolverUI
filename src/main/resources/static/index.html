@@ -27,7 +27,7 @@
 <nav>
     <div style="position:absolute; top:12px; right:20px; text-align:right;">
         <div style="font-size:18px; font-weight:700; color:#fff;">Револьвер Л1</div>
-        <div style="font-size:12px; color:#bdc3c7;">v1.0.10</div>
+        <div style="font-size:12px; color:#bdc3c7;">v1.0.11</div>
     </div>
 
     <button data-tab="stats" class="active">Статистика</button>
@@ -154,8 +154,6 @@
         document.getElementById('p-parallelism').value = c.APP_PARALLELISM || '';
         document.getElementById('p-interval').value = Math.round((c.APP_CHECK_INTERVAL_MS || 0) / 1000);
         document.getElementById('p-enabled').value = c.APP_ENABLED || 'true';
-        document.getElementById('p-group1-services').value = c.GROUP1_SERVICE_IDS || '';
-        document.getElementById('p-group2-services').value = c.GROUP2_SERVICE_IDS || '';
     }
 
     async function saveParams() {
@@ -163,8 +161,6 @@
             APP_PARALLELISM: document.getElementById('p-parallelism').value,
             APP_CHECK_INTERVAL_MS: String(parseInt(document.getElementById('p-interval').value, 10) * 1000),
             APP_ENABLED: document.getElementById('p-enabled').value,
-            GROUP1_SERVICE_IDS: document.getElementById('p-group1-services').value,
-            GROUP2_SERVICE_IDS: document.getElementById('p-group2-services').value
         };
         await fetch('/api/config', { method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -175,6 +171,12 @@
     function parseMap(json) {
         try { return JSON.parse(json); } catch (e) { return {}; }
     }
+
+    function esc(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;')
+            .replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
 
     async function loadEmployees() {
         const c = await (await fetch('/api/config')).json();
