@@ -26,8 +26,8 @@
 <body>
 <nav>
     <div style="position:absolute; top:12px; right:20px; text-align:right;">
-        <div style="font-size:18px; font-weight:700; color:#fff;">Револьвер Л1</div>
-        <div style="font-size:12px; color:#bdc3c7;">v1.0.11</div>
+        <div style="font-size:18px; font-weight:700; color:#fff;">Револьвер IntraService</div>
+        <div style="font-size:12px; color:#bdc3c7;">v1.0.13</div>
     </div>
 
     <button data-tab="stats" class="active">Статистика</button>
@@ -36,6 +36,9 @@
     <button data-tab="services">Сервисы</button>
     <button data-tab="history">История</button>
     <button data-tab="logs">Логи</button>
+
+    <!-- НОВАЯ ВКЛАДКА -->
+    <button data-tab="l2-employees" id="btn-l2-employees">Сотрудники Л2</button>
 </nav>
 <main>
     <!-- Статистика -->
@@ -115,6 +118,16 @@
             <button class="small" onclick="clearLogs()">Очистить окно</button>
         </p>
         <pre id="log-view"></pre>
+    </section>
+    <!-- Сотрудники Л2 -->
+    <section id="tab-l2-employees" class="hidden">
+        <h2>Сотрудники Л2 (LINE2_EMPLOYEES)</h2>
+        <table id="l2-emp-table"><thead>
+        <tr><th>Логин</th><th>Имя</th><th>ExecutorId</th><th>Активен</th><th></th></tr>
+        </thead><tbody></tbody></table>
+        <button class="save" onclick="addL2Row()">+ добавить</button>
+        <button class="save" onclick="saveL2Employees()">Сохранить список</button>
+        <div id="status-l2-emp"></div>
     </section>
 </main>
 <script>
@@ -206,6 +219,91 @@
             body: JSON.stringify({ LOGIN_TO_EXECUTOR_MAP: JSON.stringify(map) }) });
         showStatus('status-emp', `Сохранено: ${Object.keys(map).length} сотрудников`);
     }
+
+    // Проверка роли: если нет LINE2 — скрываем кнопку и вкладку
+    async function checkRoleAndHide() {
+        try {
+            const response = await fetch('/api/auth/me'); // нужен простой эндпоинт, см. ниже
+            if (response.ok) {
+                const me = await response.json();
+                const roles = me.authorities || [];
+                const hasLine2 = roles.some(r => r.includes('LINE2') || r.includes('SUPERADMIN'));
+                const btn = document.getElementById('btn-l2-employees');
+                if (btn) {
+                    if (!hasLine2) {
+                        btn.style.display = 'none';
+                        document.getElementById('tab-l2-employees').classList.add('hidden');
+                    } else {
+                        btn.style.display = '';
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Auth check failed', e);
+        }
+    }
+
+    // Загрузка сотрудников Л2
+    async function loadL2Employees() {
+        const c = await (await fetch('/api/config')).json();
+        const json = c.LINE2_EMPLOYEES || '[]';
+        let list;
+        try { list = JSON.parse(json); } catch (e) { list = []; }
+
+        const tb = document.querySelector('#l2-emp-table tbody');
+        tb.innerHTML = '';
+        list.forEach(e => addL2Row(e.login, e.name, e.executorId, e.enabled));
+    }
+
+    function addL2Row(login = '', name = '', executorId = '', enabled = true) {
+        document.querySelector('#l2-emp-table tbody').insertAdjacentHTML('beforeend',
+            `<tr>
+            <td><input value="${login}"></td>
+            <td><input value="${name}" style="width:160px"></td>
+            <td><input value="${executorId}" style="width:100px"></td>
+            <td>
+                <label style="margin:0"><input type="checkbox" ${enabled ? 'checked' : ''}> вкл</label>
+            </td>
+            <td><button class="small" onclick="this.closest('tr').remove()">✕</button></td>
+        </tr>`);
+    }
+
+    async function saveL2Employees() {
+        const rows = Array.from(document.querySelectorAll('#l2-emp-table tbody tr'));
+        const list = rows.map(tr => {
+            const [login, name, id, chk] = tr.querySelectorAll('input');
+            return {
+                login: login.value.trim(),
+                name: name.value.trim(),
+                executorId: id.value.trim(),
+                enabled: chk.checked
+            };
+        }).filter(e => e.login && e.executorId);
+
+        if (list.length === 0) return showStatus('status-l2-emp', 'Список пуст или есть пустые строки', false);
+
+        await fetch('/api/config', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ LINE2_EMPLOYEES: JSON.stringify(list) })
+        });
+        showStatus('status-l2-emp', `Сохранено: ${list.length} сотрудников`);
+        loadL2Employees();
+    }
+
+    // Обновляем переключение вкладок, чтобы не ломать историю
+    const tabs = document.querySelectorAll('nav button');
+    tabs.forEach(b => b.onclick = () => {
+        tabs.forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        document.querySelectorAll('main section').forEach(s => s.classList.add('hidden'));
+        document.getElementById('tab-' + b.dataset.tab).classList.remove('hidden');
+        if (b.dataset.tab === 'history') loadHistory(1);
+        if (b.dataset.tab === 'logs') pollLogs();
+        if (b.dataset.tab === 'l2-employees') loadL2Employees(); // новая вкладка
+    });
+
+    checkRoleAndHide(); // скрываем вкладку, если нет прав
 
     document.querySelector('button[data-tab="stats"]').click();
     loadStats(); loadParams(); loadEmployees(); loadServices();

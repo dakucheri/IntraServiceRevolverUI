@@ -2,6 +2,7 @@ package org.example.revolverui.task;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
@@ -27,6 +28,7 @@ import org.springframework.stereotype.Component;
 
 import javax.net.ssl.SSLContext;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -57,6 +59,7 @@ public class AssignerService {
 
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final Set<Integer> processedTaskIds = ConcurrentHashMap.newKeySet();
+    private final Set<Integer> processedLine2Ids = ConcurrentHashMap.newKeySet();
     private final AtomicInteger currentEmployeeIndex = new AtomicInteger(0);
     private volatile List<String> currentActiveEmployees = Collections.emptyList();
     private final Map<LocalDate, Map<String, Integer>> dailyStats = new ConcurrentHashMap<>();
@@ -317,6 +320,48 @@ public class AssignerService {
         }
     }
 
+    public void processTasksLine2(CloseableHttpClient client) {
+        Map<String, Map<String, String>> employees = config.getLine2Employees();
+        List<Map.Entry<String, Map<String, String>>> enabled = employees.entrySet().stream()
+                .filter(e -> "true".equals(e.getValue().get("enabled")))
+                .collect(Collectors.toList());
+        if (enabled.isEmpty()) {
+            log("INFO", "Line2: нет включённых сотрудников, пропуск");
+            return;
+        }
+
+        String requestUrl = baseUrl + "/?ExecutorIds=631&ServiceIds=48&StatusIds=38"
+                + "&fields=Id,Name,StatusId,Creator,ExecutorIds,ServiceId,ObserverIds&PageSize=50";
+        log("INFO", "Line2: фильтр выборки: " + requestUrl);
+        HttpGet getRequest = new HttpGet(requestUrl);
+        getRequest.setHeader("Authorization", auth);
+
+        List<Task> tasks = fetchTasks(client, getRequest);
+        List<Task> unprocessed = tasks.stream()
+                .filter(t -> !processedLine2Ids.contains(t.getId()))
+                .sorted(Comparator.comparingInt(Task::getId))
+                .collect(Collectors.toList());
+        if (unprocessed.isEmpty()) {
+            log("INFO", "Line2: новых заявок не найдено");
+            return;
+        }
+        log("INFO", "Line2: заявок к распределению: " + unprocessed.size());
+
+        int i = 0;
+        for (Task task : unprocessed) {
+            var emp = enabled.get(i % enabled.size());
+            String executorId = emp.getValue().get("executorId");
+            try {
+                updateTaskLine2(client, task, executorId);
+                processedLine2Ids.add(task.getId());
+                log("INFO", "Line2: заявка " + task.getId() + " назначена на " + emp.getKey() + " (" + executorId + ")");
+            } catch (IOException e) {
+                log("ERROR", "Line2: ошибка назначения заявки " + task.getId() + ": " + e.getMessage());
+            }
+            i++;
+        }
+    }
+
     private void updateTask(HttpClient client, Task task, String executorId, boolean isGroup2) throws IOException {
         HttpPut putRequest = new HttpPut(baseUrl + "/" + task.getId());
         putRequest.setHeader("Authorization", auth);
@@ -348,6 +393,33 @@ public class AssignerService {
 
         if (statusCode != 200 && statusCode != 204) {
             throw new IOException("HTTP " + statusCode + " при обновлении задачи №" + task.getId() + ": " + responseBody);
+        }
+    }
+
+    private void updateTaskLine2(CloseableHttpClient client, Task task, String executorId) throws IOException {
+        HttpPut putRequest = new HttpPut(baseUrl + "/" + task.getId());
+        putRequest.setHeader("Authorization", auth);
+        putRequest.setHeader("Content-Type", "application/json");
+
+        Map<String, Object> requestBody = new HashMap<>();
+        requestBody.put("ExecutorIds", executorId);
+
+        String observerIds = task.getObserverIds();
+        if (observerIds != null && !observerIds.isBlank()) {
+            requestBody.put("ObserverIds", observerIds);
+        }
+
+        String jsonBody = mapper.writeValueAsString(requestBody);
+        log("DEBUG", "Line2 PUT body для заявки №" + task.getId() + ": " + jsonBody);
+
+        putRequest.setEntity(new StringEntity(jsonBody, "UTF-8"));
+
+        HttpResponse response = client.execute(putRequest);
+        int statusCode = response.getStatusLine().getStatusCode();
+        String responseBody = EntityUtils.toString(response.getEntity(), "UTF-8");
+
+        if (statusCode != 200 && statusCode != 204) {
+            throw new IOException("HTTP " + statusCode + " при обновлении заявки №" + task.getId() + ": " + responseBody);
         }
     }
 

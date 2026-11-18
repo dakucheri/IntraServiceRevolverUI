@@ -19,6 +19,25 @@ public class AppConfigService {
     public static final String GROUP2_SERVICE_IDS = "GROUP2_SERVICE_IDS";
     public static final String DEFAULT_GROUP1_SERVICES = "65,64,63,62,61,50,49,46,48,45,42,41,44,43,32,22,21,20,17";
     public static final String DEFAULT_GROUP2_SERVICES = "47,19,65";
+    public static final String MODE = "APP_MODE";
+    public static final String LINE2_EMPLOYEES = "LINE2_EMPLOYEES";
+
+    public String getMode() {
+        String m = System.getenv(MODE);
+        return (m == null || m.isBlank()) ? "LINE1" : m;
+    }
+
+    /** Логин -> {executorId, enabled}. */
+    public Map<String, Map<String, String>> getLine2Employees() {
+        String json = get(LINE2_EMPLOYEES).orElse("{}");
+        try {
+            return mapper.readValue(json,
+                    new TypeReference<Map<String, Map<String, String>>>() {});
+        } catch (Exception e) {
+            logger.error("Не удалось разобрать LINE2_EMPLOYEES", e);
+            return new LinkedHashMap<>();
+        }
+    }
 
     private final ConfigDao dao;
     private final ObjectMapper mapper = new ObjectMapper();
