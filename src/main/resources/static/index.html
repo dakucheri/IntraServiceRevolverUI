@@ -224,21 +224,21 @@
     // Проверка роли: если нет LINE2 — скрываем кнопку и вкладку
     async function checkRoleAndHide() {
         try {
-            const response = await fetch('/api/auth/me'); // нужен простой эндпоинт, см. ниже
-            if (response.ok) {
-                const me = await response.json();
-                const roles = me.authorities || [];
-                const hasLine2 = roles.some(r => r.includes('LINE2') || r.includes('SUPERADMIN'));
-                const btn = document.getElementById('btn-l2-employees');
-                if (btn) {
-                    if (!hasLine2) {
-                        btn.style.display = 'none';
-                        document.getElementById('tab-l2-employees').classList.add('hidden');
-                    } else {
-                        btn.style.display = '';
-                    }
-                }
+            const me = await (await fetch('/api/auth/me')).json();
+            const auths = (me.authorities || []).join(' ');
+            const isSuper = auths.includes('ROLE_SUPERADMIN');
+            const isL1 = auths.includes('ROLE_LINE1');
+            const isL2 = auths.includes('ROLE_LINE2');
+
+            function hide(tab) {
+                const btn = document.querySelector('nav button[data-tab="' + tab + '"]');
+                const sec = document.getElementById('tab-' + tab);
+                if (btn) btn.style.display = 'none';
+                if (sec) sec.classList.add('hidden');
             }
+
+            if (!isL2 && !isSuper) hide('l2-employees');          // Л1 не видит вкладку Л2
+            if (isL2 && !isSuper) { hide('employees'); hide('services'); } // Л2 не видит карты Л1
         } catch (e) {
             console.error('Auth check failed', e);
         }
