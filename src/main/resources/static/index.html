@@ -27,7 +27,7 @@
 <nav>
     <div style="position:absolute; top:12px; right:20px; text-align:right;">
         <div style="font-size:18px; font-weight:700; color:#fff;">Револьвер IntraService</div>
-        <div style="font-size:12px; color:#bdc3c7;">v1.0.13</div>
+        <div style="font-size:12px; color:#bdc3c7;">v1.0.12</div>
     </div>
 
     <button data-tab="stats" class="active">Статистика</button>
@@ -139,6 +139,7 @@
         document.getElementById('tab-' + b.dataset.tab).classList.remove('hidden');
         if (b.dataset.tab === 'history') loadHistory(1);
         if (b.dataset.tab === 'logs') pollLogs();
+        if (b.dataset.tab === 'l2-employees') loadL2Employees();
     });
 
     function showStatus(id, text, ok = true) {
@@ -290,18 +291,6 @@
         showStatus('status-l2-emp', `Сохранено: ${list.length} сотрудников`);
         loadL2Employees();
     }
-
-    // Обновляем переключение вкладок, чтобы не ломать историю
-    const tabs = document.querySelectorAll('nav button');
-    tabs.forEach(b => b.onclick = () => {
-        tabs.forEach(x => x.classList.remove('active'));
-        b.classList.add('active');
-        document.querySelectorAll('main section').forEach(s => s.classList.add('hidden'));
-        document.getElementById('tab-' + b.dataset.tab).classList.remove('hidden');
-        if (b.dataset.tab === 'history') loadHistory(1);
-        if (b.dataset.tab === 'logs') pollLogs();
-        if (b.dataset.tab === 'l2-employees') loadL2Employees(); // новая вкладка
-    });
 
     checkRoleAndHide(); // скрываем вкладку, если нет прав
 
