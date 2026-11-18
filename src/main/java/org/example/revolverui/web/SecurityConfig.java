@@ -40,21 +40,19 @@ public class SecurityConfig {
         List<UserDetails> users = new ArrayList<>();
 
         if (!usersList.isBlank()) {
-            // Парсим APP_UI_USERS
             String[] parts = usersList.split(";");
             for (String p : parts) {
                 String[] u = p.trim().split(":", 3);
                 if (u.length == 3) {
                     String login = u[0].trim();
                     String pass = u[1].trim();
-                    String role = u[2].trim().toUpperCase(); // LINE1, LINE2, SUPERADMIN
+                    String role = u[2].trim().toUpperCase();
 
-                    // Маппинг ролей в Spring Security
                     String springRole = switch (role) {
-                        case "LINE1" -> "ROLE_LINE1";
-                        case "LINE2" -> "ROLE_LINE2";
-                        case "SUPERADMIN" -> "ROLE_SUPERADMIN";
-                        default -> "ROLE_ADMIN";
+                        case "LINE1" -> "LINE1";
+                        case "LINE2" -> "LINE2";
+                        case "SUPERADMIN" -> "SUPERADMIN";
+                        default -> "ADMIN";
                     };
 
                     users.add(User.builder()
@@ -65,14 +63,13 @@ public class SecurityConfig {
                 }
             }
         } else {
-            // Обратная совместимость: одна учётка
             String rawPassword = (legacyPassword == null || legacyPassword.isBlank())
                     ? "changeme"
                     : legacyPassword;
             users.add(User.builder()
                     .username(legacyUsername)
                     .password(encoder.encode(rawPassword))
-                    .roles("ROLE_ADMIN")
+                    .roles("ADMIN")
                     .build());
         }
 
